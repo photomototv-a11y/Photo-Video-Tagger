@@ -1,0 +1,21 @@
+export const popularStockPhotoTags: string[] = [
+  'abstract', 'aerial', 'animal', 'architecture', 'art', 'autumn', 'background', 'beach', 
+  'beautiful', 'beauty', 'black', 'blue', 'blur', 'bright', 'building', 'business', 'celebration',
+  'city', 'cityscape', 'close-up', 'cloud', 'color', 'colorful', 'communication', 'computer',
+  'concept', 'copy-space', 'corporate', 'countryside', 'dark', 'data', 'day', 'decoration',
+  'design', 'desktop', 'digital', 'drink', 'education', 'empty', 'energy', 'environment',
+  'family', 'fashion', 'finance', 'flower', 'food', 'forest', 'fresh', 'fun', 'future',
+  'garden', 'green', 'group', 'happy', 'health', 'healthy', 'holiday', 'home', 'house',
+  'illustration', 'image', 'industry', 'internet', 'isolated', 'kitchen', 'landscape', 'leaf',
+  'life', 'lifestyle', 'light', 'love', 'macro', 'man', 'many', 'medical', 'minimal',
+  'mobile', 'modern', 'money', 'morning', 'motion', 'mountain', 'music', 'natural', 'nature',
+  'network', 'new', 'night', 'nobody', 'object', 'office', 'old', 'orange', 'outdoor',
+  'outdoors', 'paper', 'park', 'party', 'pattern', 'people', 'pet', 'phone', 'photo', 'plant',
+  'portrait', 'red', 'retro', 'road', 'rock', 'room', 'rural', 'sand', 'scene', 'school',
+  'science', 'sea', 'season', 'shadow', 'shape', 'sign', 'silhouette', 'sky', 'snow', 'social',
+  'space', 'sport', 'spring', 'star', 'still-life', 'street', 'style', 'success', 'summer',
+  'sun', 'sunset', 'symbol', 'table', 'team', 'teamwork', 'tech', 'technology', 'template',
+  'texture', 'time', 'tourism', 'town', 'travel', 'tree', 'urban', 'vacation', 'vector',
+  'vintage', 'wallpaper', 'water', 'web', 'white', 'wild', 'wildlife', 'window', 'winter',
+  'woman', 'wood', 'wooden', 'work', 'workplace', 'yellow', 'young'
+];

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-g" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nano Banana Stock Photo Tagger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'brand-blue': '#4F46E5',
+              'brand-purple': '#7C3AED',
+              'dark-bg': '#111827',
+              'dark-card': '#1F2937',
+              'dark-border': '#374151',
+              'light-text': '#F3F4F6',
+              'medium-text': '#9CA3AF',
+            },
+            animation: {
+              'fade-in-up': 'fade-in-up 0.3s ease-out',
+              'toast-in': 'toast-in 0.5s ease-out forwards',
+              'toast-out': 'toast-out 0.5s ease-in forwards',
+            },
+            keyframes: {
+              'fade-in-up': {
+                '0%': {
+                  opacity: '0',
+                  transform: 'translateY(1rem)'
+                },
+                '100%': {
+                  opacity: '1',
+                  transform: 'translateY(0)'
+                },
+              },
+              'toast-in': {
+                '0%': {
+                  opacity: '0',
+                  transform: 'translateX(100%)'
+                },
+                '100%': {
+                  opacity: '1',
+                  transform: 'translateX(0)'
+                },
+              },
+              'toast-out': {
+                '0%': {
+                  opacity: '1',
+                  transform: 'translateX(0)'
+                },
+                '100%': {
+                  opacity: '0',
+                  transform: 'translateX(100%)'
+                },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.20.0",
+    "jszip": "https://aistudiocdn.com/jszip@^3.10.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-dark-bg text-light-text">
+    <!--
+      [Developer Note]
+      This application requires a Google AI API key to function.
+      Please ensure the API_KEY environment variable is set up in your deployment environment.
+    -->
+    <div id="root"></div>
+  </body>
+</html>

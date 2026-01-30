@@ -1,0 +1,5 @@
+{
+  "name": "Stock Photo Video Tagger",
+  "description": "An application that uses Gemini (Nano Banana) to generate professional stock photo titles, descriptions, and keywords for uploaded images. It helps photographers and content creators optimize their assets for platforms like Shutterstock, Adobe Stock, and iStock.",
+  "requestFramePermissions": []
+}
