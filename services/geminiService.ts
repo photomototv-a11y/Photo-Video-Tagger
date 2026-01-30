@@ -14,6 +14,15 @@ const getAiClient = (): GoogleGenAI => {
     return ai;
 };
 
+export const STOCK_CATEGORIES = [
+  'Абстракция', 'Животные и дикая природа', 'Искусство', 'Фоны и текстуры', 
+  'Красота и мода', 'Здания и достопримечательности', 'Бизнес и финансы', 
+  'Знаменитости', 'Образование', 'Еда и напитки', 'Здравоохранение и медицина', 
+  'Праздники', 'Промышленность', 'Интерьеры', 'Разное', 'Природа', 'Предметы', 
+  'Парки и природа', 'Люди', 'Религия', 'Наука', 'Знаки и символы', 
+  'Спорт и отдых', 'Технологии', 'Транспорт', 'Винтаж'
+];
+
 /**
  * Converts a File to a Gemini generative part.
  * Normalizes via Canvas to JPEG to support wide range of formats and optimize size.
@@ -210,6 +219,7 @@ Generate:
     3. Setting & Environment: Time of day, location, weather.
     4. Concepts & Emotions: Abstract themes (solitude, success, joy, connection).
     5. Style & Lighting: Technical metadata (cinematic, minimalist, macro, backlight).
+- Category: STRICTLY choose one from: ${STOCK_CATEGORIES.join(', ')}.
 - Suggestions: 30-40 additional niche keywords for broad search coverage.
 
 STRICTLY Return ONLY JSON. OBSERVE 200 CHARACTER LIMITS. EXACTLY 50 Keywords. NO synonyms repetition.`;
@@ -220,6 +230,7 @@ const metadataSchema = {
     title: { type: Type.STRING },
     description: { type: Type.STRING },
     keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+    category: { type: Type.STRING },
     suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
     isEditorial: { type: Type.BOOLEAN },
     editorialCity: { type: Type.STRING },
@@ -227,7 +238,7 @@ const metadataSchema = {
     editorialDate: { type: Type.STRING },
     editorialFact: { type: Type.STRING }
   },
-  required: ["title", "description", "keywords", "isEditorial"]
+  required: ["title", "description", "keywords", "category", "isEditorial"]
 };
 
 export const generateMediaMetadata = async (file: File, isVideo: boolean = false): Promise<{ metadata: StockMetadata, tokensUsed: number }> => {

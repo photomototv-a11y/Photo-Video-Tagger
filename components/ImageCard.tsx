@@ -3,7 +3,7 @@ import React, { useState, useCallback, useMemo, useRef } from 'react';
 import type { ImageFile, MetadataHistoryState } from '../types';
 import { ProcessingState } from '../types';
 import { useToast } from '../contexts/ToastContext';
-import { translateText, getFriendlyErrorMessage } from '../services/geminiService';
+import { translateText, getFriendlyErrorMessage, STOCK_CATEGORIES } from '../services/geminiService';
 import TranslationModal from './TranslationModal';
 import useAutosizeTextArea from '../hooks/useAutosizeTextArea';
 
@@ -26,6 +26,7 @@ interface ImageCardProps {
   onDescriptionChange: (fileId:string, newDescription: string) => void;
   onKeywordsChange: (fileId: string, newKeywords: string) => void;
   onAltTextChange: (fileId: string, newAltText: string) => void;
+  onCategoryChange: (fileId: string, newCategory: string) => void;
   onUndo: (fileId: string) => void;
   onRedo: (fileId: string) => void;
   onRetry: (fileId: string) => void;
@@ -106,6 +107,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
   onDescriptionChange,
   onKeywordsChange,
   onAltTextChange,
+  onCategoryChange,
   onUndo,
   onRedo,
   onRetry,
@@ -309,6 +311,18 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
         {imageFile.state === ProcessingState.SUCCESS && (
             <div className="space-y-4">
+                <div className="mb-2">
+                    <label className="text-xs font-bold text-medium-text block mb-1 uppercase">Category</label>
+                    <select 
+                        value={imageFile.editedCategory} 
+                        onChange={(e) => onCategoryChange(imageFile.id, e.target.value)}
+                        className="w-full p-2 bg-dark-bg border border-dark-border rounded text-sm focus:ring-1 focus:ring-brand-blue shadow-inner text-light-text"
+                    >
+                        <option value="">Select Category...</option>
+                        {STOCK_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                </div>
+                
                 <div>
                     <div className="flex justify-between items-center mb-1">
                         <label className="text-sm font-bold text-medium-text">Title</label>

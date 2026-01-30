@@ -10,6 +10,7 @@ export interface StockMetadata {
   title: string;
   description: string;
   keywords: string[];
+  category?: string;
   suggestions?: string[];
   isEditorial?: boolean;
   editorialCity?: string;
@@ -22,6 +23,7 @@ export interface MetadataHistoryState {
   editedTitle: string;
   editedDescription: string;
   editedKeywords: string;
+  editedCategory: string;
   editedAltText: string;
   editedIsEditorial: boolean;
   editedEditorialCity: string;
@@ -52,6 +54,7 @@ export interface ImageFile {
   editedTitle: string;
   editedDescription: string;
   editedAltText: string;
+  editedCategory: string;
   dateAdded: number;
   history: MetadataHistoryState[];
   historyIndex: number;

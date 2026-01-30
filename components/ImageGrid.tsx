@@ -15,6 +15,7 @@ interface ImageGridProps {
   onDescriptionChange: (fileId: string, newDescription: string) => void;
   onKeywordsChange: (fileId:string, newKeywords: string) => void;
   onAltTextChange: (fileId: string, newAltText: string) => void;
+  onCategoryChange: (fileId: string, newCategory: string) => void;
   onUndo: (fileId: string) => void;
   onRedo: (fileId: string) => void;
   onRetry: (fileId: string) => void;
@@ -39,6 +40,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   onDescriptionChange,
   onKeywordsChange, 
   onAltTextChange,
+  onCategoryChange,
   onUndo,
   onRedo,
   onRetry,
@@ -83,6 +85,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
           onDescriptionChange={onDescriptionChange}
           onKeywordsChange={onKeywordsChange}
           onAltTextChange={onAltTextChange}
+          onCategoryChange={onCategoryChange}
           onUndo={onUndo}
           onRedo={onRedo}
           onRetry={onRetry}

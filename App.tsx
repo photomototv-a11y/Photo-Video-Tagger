@@ -53,7 +53,9 @@ function App() {
         try {
           const files = await sessionService.loadSession();
           if (files.length > 0) {
-            setImageFiles(files);
+            // Ensure compatibility with old sessions by providing default empty string for new fields
+            const migratedFiles = files.map(f => ({ ...f, editedCategory: f.editedCategory || '' }));
+            setImageFiles(migratedFiles);
             addToast("Session resumed automatically", "info");
           }
         } catch (e) {
@@ -148,6 +150,7 @@ function App() {
             editedTitle: metadata.title,
             editedDescription: metadata.description,
             editedKeywords: metadata.keywords.join(', '),
+            editedCategory: metadata.category || '',
             editedAltText: '',
             editedIsEditorial: metadata.isEditorial || false,
             editedEditorialCity: metadata.editorialCity || '',
@@ -177,7 +180,7 @@ function App() {
       previewUrl: URL.createObjectURL(file),
       state: ProcessingState.IDLE,
       dateAdded: Date.now(),
-      editedTitle: '', editedDescription: '', editedKeywords: '', editedAltText: '',
+      editedTitle: '', editedDescription: '', editedKeywords: '', editedAltText: '', editedCategory: '',
       history: [], historyIndex: -1,
       editedIsEditorial: false, editedEditorialCity: '', editedEditorialRegion: '',
       editedEditorialDate: '', editedEditorialFact: '',
@@ -207,7 +210,8 @@ function App() {
     try {
       const files = await sessionService.loadSession();
       if (files.length > 0) {
-        setImageFiles(files);
+        const migratedFiles = files.map(f => ({ ...f, editedCategory: f.editedCategory || '' }));
+        setImageFiles(migratedFiles);
         addToast("Session loaded", "success");
       } else {
         addToast("No saved session found", "info");
@@ -226,7 +230,7 @@ function App() {
       const filename = `"${f.file.name}"`;
       const description = `"${f.editedDescription.replace(/"/g, '""')}"`;
       const keywords = `"${f.editedKeywords.replace(/"/g, '""')}"`;
-      const categories = `""`;
+      const categories = `"${f.editedCategory || ''}"`;
       const editorial = f.editedIsEditorial ? `"Yes"` : `"No"`;
       const matureContent = `"No"`;
       const illustration = `"No"`;
@@ -262,7 +266,7 @@ function App() {
   const handleCopyAll = async () => {
     const success = imageFiles.filter(f => f.state === ProcessingState.SUCCESS);
     if (!success.length) return;
-    const text = success.map(f => `File: ${f.file.name}\nTitle: ${f.editedTitle}\nDesc: ${f.editedDescription}\nKeys: ${f.editedKeywords}`).join('\n\n---\n\n');
+    const text = success.map(f => `File: ${f.file.name}\nTitle: ${f.editedTitle}\nDesc: ${f.editedDescription}\nKeys: ${f.editedKeywords}\nCategory: ${f.editedCategory}`).join('\n\n---\n\n');
     await navigator.clipboard.writeText(text);
     setIsCopying(true);
     addToast("All metadata copied to clipboard", "success");
@@ -399,6 +403,7 @@ function App() {
           onDescriptionChange={(id, v) => recordEdit(id, { editedDescription: v })}
           onKeywordsChange={(id, v) => recordEdit(id, { editedKeywords: v })}
           onAltTextChange={(id, v) => recordEdit(id, { editedAltText: v })}
+          onCategoryChange={(id, v) => recordEdit(id, { editedCategory: v })}
           onUndo={handleUndo} onRedo={handleRedo}
           onRetry={(id) => { const f = imageFiles.find(item => item.id === id); if (f) processImages([f]); }}
           onGenerateTitle={(id) => handleGenerateField(id, 'title')} 
