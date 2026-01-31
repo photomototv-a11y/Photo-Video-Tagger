@@ -3,7 +3,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import JSZip from 'jszip';
 import type { ImageFile, MetadataHistoryState } from './types';
 import { ProcessingState } from './types';
-import { generateMediaMetadata, generateTitle, generateDescription, generateKeywords, analyzeImageForKeywords, generateAltText, getFriendlyErrorMessage } from './services/geminiService';
+import { generateMediaMetadata, generateTitle, generateDescription, generateKeywords, analyzeImageForKeywords, generateAltText, getFriendlyErrorMessage, CATEGORY_TRANSLATIONS } from './services/geminiService';
 import * as sessionService from './services/sessionService';
 import * as quotaService from './services/quotaService';
 import { useToast } from './contexts/ToastContext';
@@ -230,7 +230,11 @@ function App() {
       const filename = `"${f.file.name}"`;
       const description = `"${f.editedDescription.replace(/"/g, '""')}"`;
       const keywords = `"${f.editedKeywords.replace(/"/g, '""')}"`;
-      const categories = `"${f.editedCategory || ''}"`;
+      
+      const rawCategory = f.editedCategory || '';
+      const englishCategory = CATEGORY_TRANSLATIONS[rawCategory] || rawCategory;
+      const categories = `"${englishCategory}"`;
+      
       const editorial = f.editedIsEditorial ? `"Yes"` : `"No"`;
       const matureContent = `"No"`;
       const illustration = `"No"`;
@@ -266,7 +270,7 @@ function App() {
   const handleCopyAll = async () => {
     const success = imageFiles.filter(f => f.state === ProcessingState.SUCCESS);
     if (!success.length) return;
-    const text = success.map(f => `File: ${f.file.name}\nTitle: ${f.editedTitle}\nDesc: ${f.editedDescription}\nKeys: ${f.editedKeywords}\nCategory: ${f.editedCategory}`).join('\n\n---\n\n');
+    const text = success.map(f => `File: ${f.file.name}\nTitle: ${f.editedTitle}\nDescription: ${f.editedDescription}\nKeywords: ${f.editedKeywords}\nCategory: ${f.editedCategory}`).join('\n\n---\n\n');
     await navigator.clipboard.writeText(text);
     setIsCopying(true);
     addToast("All metadata copied to clipboard", "success");

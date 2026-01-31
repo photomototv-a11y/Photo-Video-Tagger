@@ -23,6 +23,35 @@ export const STOCK_CATEGORIES = [
   'Спорт и отдых', 'Технологии', 'Транспорт', 'Винтаж'
 ];
 
+export const CATEGORY_TRANSLATIONS: Record<string, string> = {
+  'Абстракция': 'Abstract',
+  'Животные и дикая природа': 'Animals/Wildlife',
+  'Искусство': 'The Arts',
+  'Фоны и текстуры': 'Backgrounds/Textures',
+  'Красота и мода': 'Beauty/Fashion',
+  'Здания и достопримечательности': 'Buildings/Landmarks',
+  'Бизнес и финансы': 'Business/Finance',
+  'Знаменитости': 'Celebrities',
+  'Образование': 'Education',
+  'Еда и напитки': 'Food and Drink',
+  'Здравоохранение и медицина': 'Healthcare/Medical',
+  'Праздники': 'Holidays',
+  'Промышленность': 'Industrial',
+  'Интерьеры': 'Interiors',
+  'Разное': 'Miscellaneous',
+  'Природа': 'Nature',
+  'Предметы': 'Objects',
+  'Парки и природа': 'Parks/Outdoor',
+  'Люди': 'People',
+  'Религия': 'Religion',
+  'Наука': 'Science',
+  'Знаки и символы': 'Signs/Symbols',
+  'Спорт и отдых': 'Sports/Recreation',
+  'Технологии': 'Technology',
+  'Транспорт': 'Transportation',
+  'Винтаж': 'Vintage'
+};
+
 /**
  * Converts a File to a Gemini generative part.
  * Normalizes via Canvas to JPEG to support wide range of formats and optimize size.

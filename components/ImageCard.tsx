@@ -55,10 +55,40 @@ const ActionButton: React.FC<{
         onClick={onClick} 
         disabled={disabled} 
         title={title}
-        className={`p-1.5 bg-gray-600 hover:bg-gray-500 rounded-md disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors ${className}`}
+        className={`p-1.5 bg-gray-600 hover:bg-gray-500 rounded-md disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center ${className}`}
     >
         {children}
     </button>
+);
+
+interface FieldControlsProps {
+    onRegenerate: () => void;
+    isRegenerating?: boolean;
+    onTranslate: () => void;
+    onCopy: () => void;
+    isCopied: boolean;
+    count: number;
+    limit: number;
+    regenTitle?: string;
+}
+
+const FieldControls: React.FC<FieldControlsProps> = ({ onRegenerate, isRegenerating, onTranslate, onCopy, isCopied, count, limit, regenTitle }) => (
+    <div className="flex items-center gap-3">
+        <div className="grid grid-cols-3 gap-1">
+            <ActionButton onClick={onRegenerate} disabled={isRegenerating} title={regenTitle || "Regenerate"}>
+                {isRegenerating ? <SpinnerIcon className="w-4 h-4"/> : <SparklesIcon className="w-4 h-4 text-brand-purple"/>}
+            </ActionButton>
+            <ActionButton onClick={onTranslate} title="Translate">
+                <GlobeAltIcon className="w-4 h-4"/>
+            </ActionButton>
+            <ActionButton onClick={onCopy} title="Copy">
+                {isCopied ? <CheckIcon className="w-4 h-4 text-green-400"/> : <ClipboardIcon className="w-4 h-4"/>}
+            </ActionButton>
+        </div>
+        <span className={`text-[10px] font-mono font-bold w-12 text-right ${getCounterColorClass(count, limit)}`}>
+            {count}/{limit}
+        </span>
+    </div>
 );
 
 const SuggestionChip: React.FC<{
@@ -78,12 +108,14 @@ const SuggestionChip: React.FC<{
     </button>
 );
 
-const createEditorialPrefix = (data: { city: string; region: string; date: string; fact: string }): string => {
-  const { city, region, date, fact } = data;
-  if (!city && !region && !date && !fact) return '';
+const createEditorialPrefix = (data: { city: string; region: string; date: string }): string => {
+  const { city, region, date } = data;
+  if (!city && !region && !date) return '';
+  
   const cityPart = city ? city.toUpperCase() : '';
   const regionPart = region ? region.toUpperCase() : '';
   const locationPart = [cityPart, regionPart].filter(Boolean).join(', ');
+  
   let datePart = '';
   if (date) {
     const d = new Date(date + 'T00:00:00');
@@ -91,12 +123,11 @@ const createEditorialPrefix = (data: { city: string; region: string; date: strin
       datePart = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
     }
   }
-  const prefixParts = [locationPart, datePart].filter(Boolean);
-  let prefix = prefixParts.join(' ― ');
-  if (fact) {
-    prefix += `${prefix ? ': ' : ''}${fact}`;
-  }
-  return prefix;
+  
+  const parts = [locationPart, datePart].filter(Boolean);
+  const prefix = parts.join(' - ');
+  
+  return prefix ? `${prefix}:` : '';
 };
 
 const ImageCard: React.FC<ImageCardProps> = ({
@@ -129,13 +160,11 @@ const ImageCard: React.FC<ImageCardProps> = ({
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const altTextRef = useRef<HTMLTextAreaElement>(null);
   const keywordsRef = useRef<HTMLTextAreaElement>(null);
-  const editorialFactRef = useRef<HTMLTextAreaElement>(null);
 
   useAutosizeTextArea(titleRef, imageFile.editedTitle);
   useAutosizeTextArea(descriptionRef, imageFile.editedDescription);
   useAutosizeTextArea(altTextRef, imageFile.editedAltText);
   useAutosizeTextArea(keywordsRef, imageFile.editedKeywords);
-  useAutosizeTextArea(editorialFactRef, imageFile.editedEditorialFact);
 
   const handleCopy = (field: string, text: string) => {
     if (!text) return;
@@ -159,18 +188,30 @@ const ImageCard: React.FC<ImageCardProps> = ({
   };
 
   const handleEditorialChange = useCallback((updates: Partial<MetadataHistoryState>) => {
-    const oldPrefix = createEditorialPrefix({ city: imageFile.editedEditorialCity, region: imageFile.editedEditorialRegion, date: imageFile.editedEditorialDate, fact: imageFile.editedEditorialFact });
-    const newPrefixData = { 
-        city: updates.hasOwnProperty('editedEditorialCity') ? updates.editedEditorialCity as string : imageFile.editedEditorialCity, 
-        region: updates.hasOwnProperty('editedEditorialRegion') ? updates.editedEditorialRegion as string : imageFile.editedEditorialRegion, 
-        date: updates.hasOwnProperty('editedEditorialDate') ? updates.editedEditorialDate as string : imageFile.editedEditorialDate, 
-        fact: updates.hasOwnProperty('editedEditorialFact') ? updates.editedEditorialFact as string : imageFile.editedEditorialFact 
+    const oldPrefix = createEditorialPrefix({ 
+        city: imageFile.editedEditorialCity, 
+        region: imageFile.editedEditorialRegion, 
+        date: imageFile.editedEditorialDate
+    });
+
+    const newValues = {
+        city: updates.hasOwnProperty('editedEditorialCity') ? updates.editedEditorialCity as string : imageFile.editedEditorialCity,
+        region: updates.hasOwnProperty('editedEditorialRegion') ? updates.editedEditorialRegion as string : imageFile.editedEditorialRegion,
+        date: updates.hasOwnProperty('editedEditorialDate') ? updates.editedEditorialDate as string : imageFile.editedEditorialDate
     };
-    const newPrefix = createEditorialPrefix(newPrefixData);
+
+    const newPrefix = createEditorialPrefix(newValues);
+    
     let baseDescription = imageFile.editedDescription;
     if (oldPrefix.length > 0 && baseDescription.startsWith(oldPrefix)) {
       baseDescription = baseDescription.substring(oldPrefix.length).trim();
+    } else {
+        const legacySeparator = ' ― ';
+        if (baseDescription.includes(legacySeparator)) {
+             // Heuristic legacy cleanup if needed
+        }
     }
+
     const newDescription = newPrefix ? `${newPrefix}${baseDescription ? ` ${baseDescription}` : ''}` : baseDescription;
     onEditorialUpdate(imageFile.id, { ...updates, editedDescription: newDescription });
   }, [imageFile, onEditorialUpdate]);
@@ -194,12 +235,10 @@ const ImageCard: React.FC<ImageCardProps> = ({
         keywords.splice(editorialIndex, 1);
       }
       
-      // When turning off, also strip editorial prefix from description and clear metadata fields
       const prefix = createEditorialPrefix({ 
         city: imageFile.editedEditorialCity, 
         region: imageFile.editedEditorialRegion, 
-        date: imageFile.editedEditorialDate, 
-        fact: imageFile.editedEditorialFact 
+        date: imageFile.editedEditorialDate
       });
       
       let baseDescription = imageFile.editedDescription;
@@ -297,13 +336,9 @@ const ImageCard: React.FC<ImageCardProps> = ({
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                    <div>
+                    <div className="col-span-2">
                         <label className="block text-[10px] font-bold text-medium-text mb-1 uppercase">Date</label>
                         <input type="date" value={imageFile.editedEditorialDate} onChange={(e) => handleEditorialChange({ editedEditorialDate: e.target.value })} className="w-full p-2 bg-dark-bg border border-dark-border rounded text-xs focus:ring-1 focus:ring-brand-blue"/>
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-medium-text mb-1 uppercase">Fact Description</label>
-                        <textarea ref={editorialFactRef} value={imageFile.editedEditorialFact} onChange={(e) => handleEditorialChange({ editedEditorialFact: e.target.value })} className="w-full p-2 bg-dark-bg border border-dark-border rounded text-xs resize-none focus:ring-1 focus:ring-brand-blue" placeholder="Neutral event description..."/>
                     </div>
                 </div>
             </div>
@@ -326,12 +361,16 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <div>
                     <div className="flex justify-between items-center mb-1">
                         <label className="text-sm font-bold text-medium-text">Title</label>
-                        <div className="flex items-center gap-2">
-                            <ActionButton onClick={() => onGenerateTitle(imageFile.id)} disabled={imageFile.isGeneratingTitle} title="Regenerate Title">{imageFile.isGeneratingTitle ? <SpinnerIcon className="w-4 h-4"/> : <SparklesIcon className="w-4 h-4 text-brand-purple"/>}</ActionButton>
-                            <ActionButton onClick={() => handleTranslate('Title', imageFile.editedTitle)} title="Translate"><GlobeAltIcon className="w-4 h-4"/></ActionButton>
-                            <ActionButton onClick={() => handleCopy('Title', imageFile.editedTitle)} title="Copy">{copiedField === 'Title' ? <CheckIcon className="w-4 h-4 text-green-400"/> : <ClipboardIcon className="w-4 h-4"/>}</ActionButton>
-                            <span className={`text-[10px] font-mono font-bold ml-2 ${getCounterColorClass(imageFile.editedTitle.length, 200)}`}>{imageFile.editedTitle.length}/200</span>
-                        </div>
+                        <FieldControls 
+                            onRegenerate={() => onGenerateTitle(imageFile.id)} 
+                            isRegenerating={imageFile.isGeneratingTitle} 
+                            onTranslate={() => handleTranslate('Title', imageFile.editedTitle)} 
+                            onCopy={() => handleCopy('Title', imageFile.editedTitle)} 
+                            isCopied={copiedField === 'Title'} 
+                            count={imageFile.editedTitle.length} 
+                            limit={200}
+                            regenTitle="Regenerate Title"
+                        />
                     </div>
                     <textarea ref={titleRef} value={imageFile.editedTitle} onChange={(e) => onTitleChange(imageFile.id, e.target.value)} className="w-full p-2 bg-dark-bg border border-dark-border rounded text-sm resize-none focus:ring-1 focus:ring-brand-blue shadow-inner" />
                 </div>
@@ -339,12 +378,16 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <div>
                     <div className="flex justify-between items-center mb-1">
                         <label className="text-sm font-bold text-medium-text">Description</label>
-                        <div className="flex items-center gap-2">
-                            <ActionButton onClick={() => onGenerateDescription(imageFile.id)} disabled={imageFile.isGeneratingDescription} title="Regenerate Description">{imageFile.isGeneratingDescription ? <SpinnerIcon className="w-4 h-4"/> : <SparklesIcon className="w-4 h-4 text-brand-purple"/>}</ActionButton>
-                            <ActionButton onClick={() => handleTranslate('Description', imageFile.editedDescription)} title="Translate"><GlobeAltIcon className="w-4 h-4"/></ActionButton>
-                            <ActionButton onClick={() => handleCopy('Description', imageFile.editedDescription)} title="Copy">{copiedField === 'Description' ? <CheckIcon className="w-4 h-4 text-green-400"/> : <ClipboardIcon className="w-4 h-4"/>}</ActionButton>
-                            <span className={`text-[10px] font-mono font-bold ml-2 ${getCounterColorClass(imageFile.editedDescription.length, 200)}`}>{imageFile.editedDescription.length}/200</span>
-                        </div>
+                        <FieldControls 
+                            onRegenerate={() => onGenerateDescription(imageFile.id)} 
+                            isRegenerating={imageFile.isGeneratingDescription} 
+                            onTranslate={() => handleTranslate('Description', imageFile.editedDescription)} 
+                            onCopy={() => handleCopy('Description', imageFile.editedDescription)} 
+                            isCopied={copiedField === 'Description'} 
+                            count={imageFile.editedDescription.length} 
+                            limit={200}
+                            regenTitle="Regenerate Description"
+                        />
                     </div>
                     <textarea ref={descriptionRef} value={imageFile.editedDescription} onChange={(e) => onDescriptionChange(imageFile.id, e.target.value)} className="w-full p-2 bg-dark-bg border border-dark-border rounded text-sm resize-none focus:ring-1 focus:ring-brand-blue shadow-inner" />
                 </div>
@@ -352,11 +395,16 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <div>
                     <div className="flex justify-between items-center mb-1">
                         <label className="text-sm font-bold text-medium-text">Alt Text (Accessibility)</label>
-                        <div className="flex items-center gap-2">
-                            <ActionButton onClick={() => onGenerateAltText(imageFile.id)} disabled={imageFile.isGeneratingAltText} title="Generate Alt Text">{imageFile.isGeneratingAltText ? <SpinnerIcon className="w-4 h-4"/> : <SparklesIcon className="w-4 h-4 text-brand-purple"/>}</ActionButton>
-                            <ActionButton onClick={() => handleCopy('AltText', imageFile.editedAltText)} title="Copy">{copiedField === 'AltText' ? <CheckIcon className="w-4 h-4 text-green-400"/> : <ClipboardIcon className="w-4 h-4"/>}</ActionButton>
-                            <span className={`text-[10px] font-mono font-bold ml-2 ${getCounterColorClass(imageFile.editedAltText.length, 125)}`}>{imageFile.editedAltText.length}/125</span>
-                        </div>
+                        <FieldControls 
+                            onRegenerate={() => onGenerateAltText(imageFile.id)} 
+                            isRegenerating={imageFile.isGeneratingAltText} 
+                            onTranslate={() => handleTranslate('Alt Text', imageFile.editedAltText)} 
+                            onCopy={() => handleCopy('AltText', imageFile.editedAltText)} 
+                            isCopied={copiedField === 'AltText'} 
+                            count={imageFile.editedAltText.length} 
+                            limit={125}
+                            regenTitle="Generate Alt Text"
+                        />
                     </div>
                     <textarea ref={altTextRef} value={imageFile.editedAltText} onChange={(e) => onAltTextChange(imageFile.id, e.target.value)} className="w-full p-2 bg-dark-bg border border-dark-border rounded text-sm resize-none focus:ring-1 focus:ring-brand-blue shadow-inner" placeholder="Describe for screen readers..." />
                 </div>
@@ -364,12 +412,16 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <div>
                     <div className="flex justify-between items-center mb-1">
                         <label className="text-sm font-bold text-medium-text">Keywords</label>
-                        <div className="flex items-center gap-2">
-                            <ActionButton onClick={() => onGenerateKeywords(imageFile.id)} disabled={imageFile.isGeneratingKeywords} title="Regenerate Keywords">{imageFile.isGeneratingKeywords ? <SpinnerIcon className="w-4 h-4"/> : <SparklesIcon className="w-4 h-4 text-brand-purple"/>}</ActionButton>
-                            <ActionButton onClick={() => handleTranslate('Keywords', imageFile.editedKeywords)} title="Translate"><GlobeAltIcon className="w-4 h-4"/></ActionButton>
-                            <ActionButton onClick={() => handleCopy('Keywords', imageFile.editedKeywords)} title="Copy">{copiedField === 'Keywords' ? <CheckIcon className="w-4 h-4 text-green-400"/> : <ClipboardIcon className="w-4 h-4"/>}</ActionButton>
-                            <span className={`text-[10px] font-mono font-bold ml-2 ${getCounterColorClass(currentKeywordsSet.size, 50)}`}>{currentKeywordsSet.size}/50</span>
-                        </div>
+                        <FieldControls 
+                            onRegenerate={() => onGenerateKeywords(imageFile.id)} 
+                            isRegenerating={imageFile.isGeneratingKeywords} 
+                            onTranslate={() => handleTranslate('Keywords', imageFile.editedKeywords)} 
+                            onCopy={() => handleCopy('Keywords', imageFile.editedKeywords)} 
+                            isCopied={copiedField === 'Keywords'} 
+                            count={currentKeywordsSet.size} 
+                            limit={50}
+                            regenTitle="Regenerate Keywords"
+                        />
                     </div>
                     <textarea ref={keywordsRef} value={imageFile.editedKeywords} onChange={(e) => onKeywordsChange(imageFile.id, e.target.value)} className="w-full p-2 bg-dark-bg border border-dark-border rounded text-sm resize-none focus:ring-1 focus:ring-brand-blue shadow-inner" />
                     
