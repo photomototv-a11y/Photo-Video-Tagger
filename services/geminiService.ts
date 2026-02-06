@@ -45,7 +45,7 @@ export const CATEGORY_TRANSLATIONS: Record<string, string> = {
   'Люди': 'People',
   'Религия': 'Religion',
   'Наука': 'Science',
-  'Знаки и символы': 'Signs/Symbols',
+  'Знаки and символы': 'Signs/Symbols',
   'Спорт и отдых': 'Sports/Recreation',
   'Технологии': 'Technology',
   'Транспорт': 'Transportation',
@@ -235,23 +235,35 @@ export const getFriendlyErrorMessage = (error: unknown): string => {
     return "Произошла непредвиденная ошибка.";
 }
 
-// Improved metadata prompt using NLP techniques for semantic depth and diverse categorization
-const metadataPrompt = `You are a world-class expert in stock media metadata and NLP semantic analysis. 
-Analyze the visual and conceptual context deeply.
+// Improved metadata prompt matching "Gemini 3 Pro Prompt – Improved Version" with strictly enforced constraints
+const metadataPrompt = `You are an elite stock photography metadata expert. Analyze the uploaded images for stock photo optimization (Shutterstock, Adobe Stock, iStock).
 
-Generate:
-- Title (max 200 chars): High-impact, SEO-optimized, concise.
-- Description (max 200 chars): Factual, objective, search-engine friendly.
-- Keywords: Exactly 50 lowercase terms. Use semantic NLP clustering to ensure diversity across:
-    1. Objects & Subjects: Physical entities present.
-    2. Actions & Verbs: Dynamics and behaviors.
-    3. Setting & Environment: Time of day, location, weather.
-    4. Concepts & Emotions: Abstract themes (solitude, success, joy, connection).
-    5. Style & Lighting: Technical metadata (cinematic, minimalist, macro, backlight).
-- Category: STRICTLY choose one from: ${STOCK_CATEGORIES.join(', ')}.
-- Suggestions: 30-40 additional niche keywords for broad search coverage.
+Generate the following metadata strictly adhering to these rules:
 
-STRICTLY Return ONLY JSON. OBSERVE 200 CHARACTER LIMITS. EXACTLY 50 Keywords. NO synonyms repetition.`;
+1. Title (6-10 words):
+   - Include: Main object, key texture/feature, relevant adjective.
+   - Avoid: Long prepositions, extra details ("Top View of", "during"), subjective evaluations ("Beautiful", "Amazing").
+   - Example: "Snow-covered Wooden Bench with Fluffy White Powder".
+
+2. Description (MAX 200 CHARACTERS):
+   - STRICTLY LIMIT to 200 characters or less.
+   - Focus: What is depicted + texture + usage context (background, marketing, seasonal).
+   - Style: Concise, informative, neutral, commercial.
+   - STRICTLY FORBIDDEN WORDS: "Perfect", "Ideal", "Symbolizing", "Showcasing", "Feature", "Illustrating", "Visually", "Picturetionaly", "Beautiful", "Amazing", "Stunning", "Depicting".
+   - No design clichés or service phrases.
+   - Example: "Close-up of fluffy snow covering wooden bench slats. Natural frozen texture suitable for winter backgrounds, seasonal marketing, and holiday design."
+
+3. Keywords (40-50 words):
+   - First 10-15 must be the most important commercial keywords (Buyer Intent).
+   - All lowercase, comma-separated.
+   - Focus on visual and textural characteristics + application.
+   - No duplicates.
+
+4. Category: STRICTLY choose one from: ${STOCK_CATEGORIES.join(', ')}.
+
+5. Suggestions: 30-40 additional niche keywords.
+
+STRICTLY Return ONLY JSON matching the schema.`;
 
 const metadataSchema = {
   type: Type.OBJECT,
@@ -270,7 +282,11 @@ const metadataSchema = {
   required: ["title", "description", "keywords", "category", "isEditorial"]
 };
 
-export const generateMediaMetadata = async (file: File, isVideo: boolean = false): Promise<{ metadata: StockMetadata, tokensUsed: number }> => {
+export const generateMediaMetadata = async (
+    file: File, 
+    isVideo: boolean = false, 
+    batchContext?: { previousTitles: string[], previousKeywords: string[] }
+): Promise<{ metadata: StockMetadata, tokensUsed: number }> => {
   return withApiRetry(async () => {
     const aiClient = getAiClient();
     let parts: any[] = [];
@@ -281,10 +297,36 @@ export const generateMediaMetadata = async (file: File, isVideo: boolean = false
         const imagePart = await fileToGenerativePart(file);
         parts = [imagePart];
     }
-    parts.push({ text: metadataPrompt });
+    
+    let prompt = metadataPrompt;
+    
+    // Apply Batch Mode Instructions if context is provided
+    if (batchContext) {
+        const { previousTitles, previousKeywords } = batchContext;
+        const hasTitles = previousTitles && previousTitles.length > 0;
+        const hasKeywords = previousKeywords && previousKeywords.length > 0;
+
+        if (hasTitles || hasKeywords) {
+            prompt += `\n\n--- BATCH MODE INSTRUCTIONS ---\nProcess multiple images in the same session. Compare across images and avoid cannibalization.\n`;
+
+            if (hasTitles) {
+                // Pass last 10 titles to ensure uniqueness
+                const recentTitles = previousTitles.slice(-10).join('; ');
+                prompt += `\nPREVIOUS TITLES (Ensure Uniqueness - NO DUPLICATES): [${recentTitles}]`;
+            }
+
+            if (hasKeywords) {
+                // Pass recent keywords to avoid excessive repetition
+                const recentKeywords = previousKeywords.slice(-150).join(', ');
+                prompt += `\nPREVIOUS KEYWORDS (Avoid Cannibalization): [${recentKeywords}]`;
+                prompt += `\nINSTRUCTION: If a keyword already appears in the list above, replace it with a synonym, related term, or broader category unless it is critical for Buyer Intent. Maintain consistent style and structure.`;
+            }
+        }
+    }
+
+    parts.push({ text: prompt });
 
     const response = await aiClient.models.generateContent({
-      // Fixed: Selection of 'gemini-3-flash-preview' for basic text tasks (summarization, analysis).
       model: 'gemini-3-flash-preview',
       contents: { parts },
       config: { responseMimeType: "application/json", responseSchema: metadataSchema },
@@ -292,7 +334,7 @@ export const generateMediaMetadata = async (file: File, isVideo: boolean = false
 
     const text = response.text || '{}';
     const parsedJson = JSON.parse(text);
-    return { metadata: parsedJson, tokensUsed: estimateTokens(metadataPrompt) + estimateTokens(text) };
+    return { metadata: parsedJson, tokensUsed: estimateTokens(prompt) + estimateTokens(text) };
   }, 'generateMediaMetadata');
 };
 
@@ -302,7 +344,6 @@ export const translateText = async (textToTranslate: string, targetLanguage: str
         const prompt = `Translate to ${targetLanguage}. Return JSON with 'translation'. Text: "${textToTranslate}"`;
         const schema = { type: Type.OBJECT, properties: { translation: { type: Type.STRING } } };
         const response = await aiClient.models.generateContent({
-            // Fixed: Selection of 'gemini-3-flash-preview' for translation tasks.
             model: 'gemini-3-flash-preview',
             contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: schema },
@@ -315,10 +356,14 @@ export const translateText = async (textToTranslate: string, targetLanguage: str
 export const generateTitle = async (imageFile: File, context: any) => withApiRetry(async () => {
     const aiClient = getAiClient();
     const imagePart = await fileToGenerativePart(imageFile);
-    const prompt = `NLP-optimized stock title (max 200 chars). Context: Desc: ${context.description}, Keys: ${context.keywords}. Return JSON {'title': string}.`;
+    const prompt = `Generate a concise, clear, and SEO-friendly stock title (6-10 words).
+Rules:
+- Include: Main object, key texture/feature, relevant adjective.
+- Avoid: Long prepositions, extra details ("Top View of", "during"), subjective evaluations ("Beautiful", "Amazing").
+Context: Desc: ${context.description}, Keys: ${context.keywords}.
+Return JSON {'title': string}.`;
     const schema = { type: Type.OBJECT, properties: { title: { type: Type.STRING } } };
     const response = await aiClient.models.generateContent({
-        // Fixed: Selection of 'gemini-3-flash-preview' for title generation.
         model: 'gemini-3-flash-preview',
         contents: { parts: [imagePart, { text: prompt }] },
         config: { responseMimeType: "application/json", responseSchema: schema },
@@ -330,10 +375,17 @@ export const generateTitle = async (imageFile: File, context: any) => withApiRet
 export const generateDescription = async (imageFile: File, context: any) => withApiRetry(async () => {
     const aiClient = getAiClient();
     const imagePart = await fileToGenerativePart(imageFile);
-    const prompt = `NLP-optimized stock description (max 200 chars). Context: Title: ${context.title}, Keys: ${context.keywords}. Return JSON {'description': string}.`;
+    const prompt = `Generate a commercially oriented stock description (MAX 200 CHARACTERS).
+Rules:
+- STRICTLY LIMIT to 200 characters or less.
+- Focus: What is depicted + texture + usage context.
+- Style: Concise, informative, neutral, commercial.
+- STRICTLY FORBIDDEN WORDS: "Perfect", "Ideal", "Symbolizing", "Showcasing", "Feature", "Illustrating", "Visually", "Picturetionaly".
+- No design clichés or service phrases.
+Context: Title: ${context.title}, Keys: ${context.keywords}.
+Return JSON {'description': string}.`;
     const schema = { type: Type.OBJECT, properties: { description: { type: Type.STRING } } };
     const response = await aiClient.models.generateContent({
-        // Fixed: Selection of 'gemini-3-flash-preview' for description generation.
         model: 'gemini-3-flash-preview',
         contents: { parts: [imagePart, { text: prompt }] },
         config: { responseMimeType: "application/json", responseSchema: schema },
@@ -348,7 +400,6 @@ export const generateAltText = async (imageFile: File, context: any) => withApiR
     const prompt = `Semantic Alt Text (max 125 chars) for accessibility. Return JSON {'altText': string}.`;
     const schema = { type: Type.OBJECT, properties: { altText: { type: Type.STRING } } };
     const response = await aiClient.models.generateContent({
-        // Fixed: Selection of 'gemini-3-flash-preview' for alt text generation.
         model: 'gemini-3-flash-preview',
         contents: { parts: [imagePart, { text: prompt }] },
         config: { responseMimeType: "application/json", responseSchema: schema },
@@ -360,10 +411,15 @@ export const generateAltText = async (imageFile: File, context: any) => withApiR
 export const generateKeywords = async (imageFile: File, context: any) => withApiRetry(async () => {
     const aiClient = getAiClient();
     const imagePart = await fileToGenerativePart(imageFile);
-    const prompt = `Generate exactly 50 relevant lowercase stock keywords using semantic analysis. Categorize by objects, actions, concepts, and mood. No synonyms. Context: Title: ${context.title}, Desc: ${context.description}. Return JSON {'keywords': string[]}.`;
+    const prompt = `Generate 40-50 commercially relevant lowercase stock keywords.
+Rules:
+- First 10-15 must be most important.
+- Focus on visual and textural characteristics + application.
+- No duplicates.
+Context: Title: ${context.title}, Desc: ${context.description}.
+Return JSON {'keywords': string[]}.`;
     const schema = { type: Type.OBJECT, properties: { keywords: { type: Type.ARRAY, items: { type: Type.STRING } } } };
     const response = await aiClient.models.generateContent({
-        // Fixed: Selection of 'gemini-3-flash-preview' for keyword generation.
         model: 'gemini-3-flash-preview',
         contents: { parts: [imagePart, { text: prompt }] },
         config: { responseMimeType: "application/json", responseSchema: schema },
@@ -387,7 +443,6 @@ export const analyzeImageForKeywords = async (imageFile: File) => withApiRetry(a
       }
     };
     const response = await aiClient.models.generateContent({
-      // Fixed: Selection of 'gemini-3-flash-preview' for image content analysis.
       model: 'gemini-3-flash-preview',
       contents: { parts: [imagePart, { text: prompt }] },
       config: { responseMimeType: "application/json", responseSchema: schema },

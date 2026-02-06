@@ -140,37 +140,67 @@ function App() {
 
   const processImages = useCallback(async (files: ImageFile[]) => {
     setIsProcessing(true);
-    const promises = files.map(async (img) => {
-      try {
-        setImageFiles(current => current.map(f => f.id === img.id ? { ...f, state: ProcessingState.PROCESSING } : f));
-        const { metadata, tokensUsed } = await generateMediaMetadata(img.file, img.mediaType === 'video');
-        addTokenUsage(tokensUsed);
+    
+    // Initialize context from existing successful images
+    const processedTitles: string[] = [];
+    const processedKeywords = new Set<string>();
 
-        const state: MetadataHistoryState = {
-            editedTitle: metadata.title,
-            editedDescription: metadata.description,
-            editedKeywords: metadata.keywords.join(', '),
-            editedCategory: metadata.category || '',
-            editedAltText: '',
-            editedIsEditorial: metadata.isEditorial || false,
-            editedEditorialCity: metadata.editorialCity || '',
-            editedEditorialRegion: metadata.editorialRegion || '',
-            editedEditorialDate: metadata.editorialDate || '',
-            editedEditorialFact: metadata.editorialFact || '',
-        };
-
-        setImageFiles(current => current.map(f => f.id === img.id ? { 
-          ...f, state: ProcessingState.SUCCESS, metadata, ...state, history: [state], historyIndex: 0 
-        } : f));
-      } catch (err) {
-        const msg = getFriendlyErrorMessage(err);
-        addToast(`${img.file.name}: ${msg}`, 'error');
-        setImageFiles(current => current.map(f => f.id === img.id ? { ...f, state: ProcessingState.ERROR, error: msg } : f));
-      }
+    imageFiles.forEach(f => {
+        if (f.state === ProcessingState.SUCCESS) {
+            if (f.editedTitle) processedTitles.push(f.editedTitle);
+            if (f.editedKeywords) {
+                f.editedKeywords.split(',').forEach(k => processedKeywords.add(k.trim().toLowerCase()));
+            }
+        }
     });
-    await Promise.all(promises);
+
+    // Process sequentially to allow batch context awareness
+    for (const img of files) {
+        // Skip if already processed (rare case here but good safeguard)
+        if (img.state === ProcessingState.SUCCESS) continue;
+
+        try {
+            setImageFiles(current => current.map(f => f.id === img.id ? { ...f, state: ProcessingState.PROCESSING } : f));
+            
+            // Prepare context for batch processing
+            const batchContext = {
+                previousTitles: processedTitles,
+                previousKeywords: Array.from(processedKeywords)
+            };
+
+            const { metadata, tokensUsed } = await generateMediaMetadata(img.file, img.mediaType === 'video', batchContext);
+            addTokenUsage(tokensUsed);
+
+            // Update context with new results
+            if (metadata.title) processedTitles.push(metadata.title);
+            if (metadata.keywords) {
+                metadata.keywords.forEach(k => processedKeywords.add(k.toLowerCase()));
+            }
+
+            const state: MetadataHistoryState = {
+                editedTitle: metadata.title,
+                editedDescription: metadata.description,
+                editedKeywords: metadata.keywords.join(', '),
+                editedCategory: metadata.category || '',
+                editedAltText: '',
+                editedIsEditorial: metadata.isEditorial || false,
+                editedEditorialCity: metadata.editorialCity || '',
+                editedEditorialRegion: metadata.editorialRegion || '',
+                editedEditorialDate: metadata.editorialDate || '',
+                editedEditorialFact: metadata.editorialFact || '',
+            };
+
+            setImageFiles(current => current.map(f => f.id === img.id ? { 
+              ...f, state: ProcessingState.SUCCESS, metadata, ...state, history: [state], historyIndex: 0 
+            } : f));
+        } catch (err) {
+            const msg = getFriendlyErrorMessage(err);
+            addToast(`${img.file.name}: ${msg}`, 'error');
+            setImageFiles(current => current.map(f => f.id === img.id ? { ...f, state: ProcessingState.ERROR, error: msg } : f));
+        }
+    }
     setIsProcessing(false);
-  }, [addTokenUsage, addToast]);
+  }, [imageFiles, addTokenUsage, addToast]);
 
   const handleFilesSelected = (selectedFiles: File[]) => {
     const newFiles: ImageFile[] = selectedFiles.map(file => ({
