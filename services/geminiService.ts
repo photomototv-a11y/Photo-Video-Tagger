@@ -284,32 +284,39 @@ Generate the following metadata strictly adhering to these rules:
 - **Keywords:** Prioritize location, monument name, cultural identity. No speculative historical sub-terms.
 
 **SUBJECT-SPECIFIC RULES:**
-- **If Texture/Pattern:** Prioritize "Texture" or "Background" in the Title.
+- **If Texture/Pattern (CRITICAL):** 
+  - **Title:** First 3-5 words MUST contain the primary high-volume search term + "Texture", "Background", "Surface", "Pattern", or "Wall".
+  - **Description:** First sentence MUST include the primary search term. Include clear commercial usage intent (eco design, architectural background, branding).
+  - **Keywords:** At least 30-40% must differ from similar images in the same cluster.
 - **If Person:** Prioritize conceptual keywords (Education, Lifestyle, Business, Development).
 - **If Industrial Material:** Avoid geological speculation (e.g., don't name specific rock types unless obvious).
 - **If Plant/Nature:** Avoid specific species names unless 100% visually confirmed.
 
-1. Title (70-140 characters):
+1. Title (60-140 characters):
    - **IMPORTANT: First 3-5 words MUST contain the main high-volume search term.**
    - Include a commercial tag if relevant (background, texture, concept).
-   - No repetition.
+   - No repetition of the same word twice.
+   - No filler phrases ("for design", "ideal for", "inspired by").
+   - No poetic adjectives.
    - Natural professional English.
-   - Example: "Fresh Red Apple with Water Droplets Isolated on White Background Healthy Food Concept".
+   - Example: "Green Hedge Texture Background Full Frame Dense Foliage Wall".
 
 2. Description (MAX 200 CHARACTERS):
    - **Structure:** 
      - Sentence 1: Primary term + core visual description.
-     - Sentence 2: Commercial usage intent.
+     - Sentence 2: Commercial usage intent (eco design, architectural background, branding).
    - STRICTLY LIMIT to 200 characters or less.
    - **FORBIDDEN PHRASES:** "close-up of", "detailed view", "perfect for", "ideal for", "image of", "picture of".
-   - No excessive adjectives. Max 2 sentences.
-   - Example: "Fresh red apple with water droplets on white background. Healthy fruit concept for diet and nutrition design."
+   - No speculative or scientific claims.
+   - Max 2 sentences.
+   - Example: "Green hedge texture background with dense overlapping leaves in full frame. Natural foliage surface suitable for eco design, garden themes, and organic branding."
 
 3. Keywords (Max 50):
    - First 10 must be the strongest search phrases (Buyer Intent).
    - All lowercase, comma-separated.
    - No speculative details (no plant species unless certain).
    - No rare or decorative words.
+   - **Anti-Cannibalization:** At least 30-40% keywords must differ from similar images in the same cluster.
    - Focus on commercial intent and search relevance.
    - No duplicates.
 
@@ -416,14 +423,15 @@ export const translateText = async (textToTranslate: string, targetLanguage: str
 export const generateTitle = async (imageFile: File, context: any) => withApiRetry(async () => {
     const aiClient = getAiClient();
     const imagePart = await fileToGenerativePart(imageFile);
-    const prompt = `Generate a concise, clear, and SEO-friendly stock title (70-140 characters).
+    const prompt = `Generate a concise, clear, and SEO-friendly stock title (60-140 characters).
 Rules:
 - **First 3-5 words MUST contain the main high-volume search term.**
-- **If Texture:** Prioritize "Texture" or "Background".
+- **If Texture:** Prioritize "Texture", "Background", "Surface", "Pattern", or "Wall".
 - **If Person:** Prioritize concept (Lifestyle, Business, etc.).
 - **IF EDITORIAL:** Factual, neutral tone. NO marketing/evaluative words. Include Subject + Location.
 - Include a commercial tag if relevant (non-editorial).
-- No repetition.
+- No repetition of the same word twice.
+- No filler phrases ("for design", "ideal for").
 - Natural professional English.
 - Avoid: Long prepositions, extra details ("Top View of", "during"), subjective evaluations ("Beautiful", "Amazing").
 Context: Desc: ${context.description}, Keys: ${context.keywords}.
@@ -445,10 +453,11 @@ export const generateDescription = async (imageFile: File, context: any) => with
 Rules:
 - **Structure:** 
   1. Primary term + core visual description.
-  2. Commercial usage intent.
+  2. Commercial usage intent (eco design, architectural background, branding).
 - **IF EDITORIAL:** Must begin with "City, Country – Month Day, Year:". Factual, neutral. NO commercial phrases.
 - STRICTLY LIMIT to 200 characters or less.
 - **FORBIDDEN:** "close-up of", "detailed view", "perfect for", "ideal for", excessive adjectives.
+- No speculative or scientific claims.
 - Max 2 sentences.
 Context: Title: ${context.title}, Keys: ${context.keywords}.
 Return JSON {'description': string}.`;
