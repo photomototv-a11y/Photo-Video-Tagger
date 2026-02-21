@@ -1,13 +1,16 @@
+
 import React, { useState, useCallback } from 'react';
 import { UploadIcon } from './icons/UploadIcon';
 import { SpinnerIcon } from './icons/SpinnerIcon';
+import { FolderOpenIcon } from './icons/FolderOpenIcon';
 
 interface ImageUploaderProps {
   onFilesSelected: (files: File[]) => void;
   isProcessing: boolean;
+  onLoadSession?: () => void;
 }
 
-const ImageUploader: React.FC<ImageUploaderProps> = ({ onFilesSelected, isProcessing }) => {
+const ImageUploader: React.FC<ImageUploaderProps> = ({ onFilesSelected, isProcessing, onLoadSession }) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,7 +64,20 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onFilesSelected, isProces
           <p className="mb-2 text-sm text-medium-text">
             <span className="font-semibold text-brand-blue">Click to upload</span> or drag and drop
           </p>
-          <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">Images & Videos</p>
+          <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-4">Images & Videos</p>
+          
+          {onLoadSession && (
+              <div className="mt-2 flex flex-col items-center">
+                  <div className="text-[10px] text-gray-600 uppercase mb-2 font-bold">- OR -</div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onLoadSession(); }}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-light-text rounded-md text-sm font-semibold border border-dark-border transition-colors shadow-sm"
+                  >
+                      <FolderOpenIcon className="w-4 h-4" />
+                      Load Saved Session
+                  </button>
+              </div>
+          )}
         </div>
         <input 
           id="dropzone-file" 

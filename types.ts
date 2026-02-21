@@ -71,6 +71,10 @@ export interface ImageFile {
   editedEditorialDate: string; // YYYY-MM-DD
   editedEditorialFact: string;
   duration?: number;
+  
+  // Session Persistence
+  thumbnailData?: string; // Base64 encoded low-res thumbnail for portable sessions
+  isRestored?: boolean; // Flag to indicate if the file object is a dummy/restored one
 }
 
 // --- Bulk Editing Types ---

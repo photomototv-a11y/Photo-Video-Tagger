@@ -123,40 +123,68 @@ export const extractVideoFrames = async (file: File, frameCount: number = 8): Pr
     return new Promise((resolve, reject) => {
         const video = document.createElement('video');
         video.preload = 'metadata';
+        video.playsInline = true;
+        video.muted = true;
         const url = URL.createObjectURL(file);
         video.src = url;
-        video.muted = true;
+
+        // Timeout to reject if it hangs (e.g. codec issues causing endless loading)
+        const timeout = setTimeout(() => {
+             URL.revokeObjectURL(url);
+             reject(new Error("VIDEO_TIMEOUT")); 
+        }, 30000);
         
         video.onloadedmetadata = async () => {
+            clearTimeout(timeout);
             const duration = video.duration;
+            if (!isFinite(duration) || duration === 0) {
+                 URL.revokeObjectURL(url);
+                 // Fallback for zero duration or streaming issues
+                 reject(new Error("VIDEO_DURATION_INVALID"));
+                 return;
+            }
+
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             const frames: { data: string, mimeType: string }[] = [];
             
+            // Set canvas size based on video aspect ratio, capped at 1280px width
+            const aspect = video.videoWidth / video.videoHeight;
             canvas.width = 1280;
-            canvas.height = (video.videoHeight / video.videoWidth) * 1280;
+            canvas.height = 1280 / aspect;
             
-            for (let i = 0; i < frameCount; i++) {
-                const time = (duration / (frameCount + 1)) * (i + 1);
-                video.currentTime = time;
-                await new Promise((r) => { video.onseeked = r; });
-                
-                context?.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                frames.push({
-                    data: dataUrl.split(',')[1],
-                    mimeType: 'image/jpeg'
-                });
+            try {
+                for (let i = 0; i < frameCount; i++) {
+                    const time = (duration / (frameCount + 1)) * (i + 1);
+                    video.currentTime = time;
+                    await new Promise((r, rej) => { 
+                        video.onseeked = r; 
+                        video.onerror = () => rej(new Error("VIDEO_SEEK_ERROR"));
+                    });
+                    
+                    context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    frames.push({
+                        data: dataUrl.split(',')[1],
+                        mimeType: 'image/jpeg'
+                    });
+                }
+                URL.revokeObjectURL(url);
+                resolve(frames);
+            } catch (err) {
+                URL.revokeObjectURL(url);
+                reject(err);
             }
-            
-            URL.revokeObjectURL(url);
-            resolve(frames);
         };
         
         video.onerror = () => {
+            clearTimeout(timeout);
             URL.revokeObjectURL(url);
             reject(new Error("VIDEO_LOAD_ERROR"));
         };
+
+        // Explicitly trigger load
+        video.load();
     });
 };
 
@@ -191,6 +219,8 @@ const handleGeminiError = (error: any, functionName: string): never => {
         const msg = error.message;
         if (msg === "RAW_NOT_SUPPORTED") throw new Error("RAW_NOT_SUPPORTED");
         if (msg === "FORMAT_NOT_SUPPORTED_BY_BROWSER") throw new Error("FORMAT_NOT_SUPPORTED");
+        if (msg === "VIDEO_LOAD_ERROR") throw new Error("VIDEO_LOAD_ERROR");
+        if (msg === "VIDEO_TIMEOUT") throw new Error("VIDEO_TIMEOUT");
         
         const lowMsg = msg.toLowerCase();
         if (lowMsg.includes('safety')) throw new Error("CONTENT_SAFETY_VIOLATION");
@@ -226,6 +256,8 @@ export const getFriendlyErrorMessage = (error: unknown): string => {
         switch (error.message) {
             case "RAW_NOT_SUPPORTED": return "RAW форматы не поддерживаются браузером. Используйте JPEG/PNG.";
             case "FORMAT_NOT_SUPPORTED": return "Файл не поддерживается браузером.";
+            case "VIDEO_LOAD_ERROR": return "Ошибка чтения видео. Формат не поддерживается браузером или файл поврежден.";
+            case "VIDEO_TIMEOUT": return "Тайм-аут обработки видео. Файл может быть слишком большим или кодек не поддерживается.";
             case "QUOTA_EXCEEDED": return "Превышена квота API (429). Пожалуйста, проверьте биллинг в Google Cloud Console или подождите сброса лимитов.";
             case "RATE_LIMIT_EXCEEDED": return "Слишком много запросов. Подождите немного.";
             case "CONTENT_SAFETY_VIOLATION": return "Контент заблокирован фильтрами безопасности.";
@@ -240,23 +272,45 @@ const metadataPrompt = `You are an elite stock photography metadata expert. Anal
 
 Generate the following metadata strictly adhering to these rules:
 
-1. Title (6-10 words):
-   - Include: Main object, key texture/feature, relevant adjective.
-   - Avoid: Long prepositions, extra details ("Top View of", "during"), subjective evaluations ("Beautiful", "Amazing").
-   - Example: "Snow-covered Wooden Bench with Fluffy White Powder".
+**ANTI-CANNIBALIZATION STRATEGY 2026:**
+- **Cluster Strategy:** Identify the search cluster (e.g., "Green Organic", "Hardscape", "Education").
+- **Leader vs Support:** If this is a unique image, create a "Leader" title (universal). If similar to others, create a "Support" title (specific intent).
+- **Unique Anchor:** Ensure the first 5 words of the Title are unique.
+- **Vary Intent:** Use different commercial intents for similar subjects (e.g., Surface vs Backdrop vs Pattern).
+
+**EDITORIAL CONTENT RULES (IF isEditorial=true):**
+- **Title:** Clear, factual, neutral tone. NO marketing phrases ("travel concept", "culture"). NO evaluative words ("famous", "beautiful"). Include Subject + Location.
+- **Description:** MUST follow format: "City, Country – Month Day, Year: [Factual Description]". Max 200 chars. NO commercial phrases ("suitable for").
+- **Keywords:** Prioritize location, monument name, cultural identity. No speculative historical sub-terms.
+
+**SUBJECT-SPECIFIC RULES:**
+- **If Texture/Pattern:** Prioritize "Texture" or "Background" in the Title.
+- **If Person:** Prioritize conceptual keywords (Education, Lifestyle, Business, Development).
+- **If Industrial Material:** Avoid geological speculation (e.g., don't name specific rock types unless obvious).
+- **If Plant/Nature:** Avoid specific species names unless 100% visually confirmed.
+
+1. Title (70-140 characters):
+   - **IMPORTANT: First 3-5 words MUST contain the main high-volume search term.**
+   - Include a commercial tag if relevant (background, texture, concept).
+   - No repetition.
+   - Natural professional English.
+   - Example: "Fresh Red Apple with Water Droplets Isolated on White Background Healthy Food Concept".
 
 2. Description (MAX 200 CHARACTERS):
+   - **Structure:** 
+     - Sentence 1: Primary term + core visual description.
+     - Sentence 2: Commercial usage intent.
    - STRICTLY LIMIT to 200 characters or less.
-   - Focus: What is depicted + texture + usage context (background, marketing, seasonal).
-   - Style: Concise, informative, neutral, commercial.
-   - STRICTLY FORBIDDEN WORDS: "Perfect", "Ideal", "Symbolizing", "Showcasing", "Feature", "Illustrating", "Visually", "Picturetionaly", "Beautiful", "Amazing", "Stunning", "Depicting".
-   - No design clichés or service phrases.
-   - Example: "Close-up of fluffy snow covering wooden bench slats. Natural frozen texture suitable for winter backgrounds, seasonal marketing, and holiday design."
+   - **FORBIDDEN PHRASES:** "close-up of", "detailed view", "perfect for", "ideal for", "image of", "picture of".
+   - No excessive adjectives. Max 2 sentences.
+   - Example: "Fresh red apple with water droplets on white background. Healthy fruit concept for diet and nutrition design."
 
-3. Keywords (40-50 words):
-   - First 10-15 must be the most important commercial keywords (Buyer Intent).
+3. Keywords (Max 50):
+   - First 10 must be the strongest search phrases (Buyer Intent).
    - All lowercase, comma-separated.
-   - Focus on visual and textural characteristics + application.
+   - No speculative details (no plant species unless certain).
+   - No rare or decorative words.
+   - Focus on commercial intent and search relevance.
    - No duplicates.
 
 4. Category: STRICTLY choose one from: ${STOCK_CATEGORIES.join(', ')}.
@@ -313,6 +367,11 @@ export const generateMediaMetadata = async (
                 // Pass last 10 titles to ensure uniqueness
                 const recentTitles = previousTitles.slice(-10).join('; ');
                 prompt += `\nPREVIOUS TITLES (Ensure Uniqueness - NO DUPLICATES): [${recentTitles}]`;
+                prompt += `\n\n**ANTI-CANNIBALIZATION RULES (CRITICAL):**
+1. **Unique Anchor:** The first 5 words of the Title MUST be unique compared to previous titles.
+2. **Vary Intent:** If a similar subject exists in previous titles, change the commercial intent (e.g., "Concrete Wall" -> "Industrial Surface" -> "Minimal Backdrop").
+3. **Avoid Mirror Constructions:** Do not just swap words (e.g., "Texture Background" vs "Background Texture"). Use synonyms: Surface, Backdrop, Pattern, Wall, Material.
+`;
             }
 
             if (hasKeywords) {
@@ -320,6 +379,7 @@ export const generateMediaMetadata = async (
                 const recentKeywords = previousKeywords.slice(-150).join(', ');
                 prompt += `\nPREVIOUS KEYWORDS (Avoid Cannibalization): [${recentKeywords}]`;
                 prompt += `\nINSTRUCTION: If a keyword already appears in the list above, replace it with a synonym, related term, or broader category unless it is critical for Buyer Intent. Maintain consistent style and structure.`;
+                prompt += `\n4. **Keyword Diversity:** Ensure at least 40% of keywords are unique compared to previous images in this batch.`;
             }
         }
     }
@@ -356,9 +416,15 @@ export const translateText = async (textToTranslate: string, targetLanguage: str
 export const generateTitle = async (imageFile: File, context: any) => withApiRetry(async () => {
     const aiClient = getAiClient();
     const imagePart = await fileToGenerativePart(imageFile);
-    const prompt = `Generate a concise, clear, and SEO-friendly stock title (6-10 words).
+    const prompt = `Generate a concise, clear, and SEO-friendly stock title (70-140 characters).
 Rules:
-- Include: Main object, key texture/feature, relevant adjective.
+- **First 3-5 words MUST contain the main high-volume search term.**
+- **If Texture:** Prioritize "Texture" or "Background".
+- **If Person:** Prioritize concept (Lifestyle, Business, etc.).
+- **IF EDITORIAL:** Factual, neutral tone. NO marketing/evaluative words. Include Subject + Location.
+- Include a commercial tag if relevant (non-editorial).
+- No repetition.
+- Natural professional English.
 - Avoid: Long prepositions, extra details ("Top View of", "during"), subjective evaluations ("Beautiful", "Amazing").
 Context: Desc: ${context.description}, Keys: ${context.keywords}.
 Return JSON {'title': string}.`;
@@ -377,11 +443,13 @@ export const generateDescription = async (imageFile: File, context: any) => with
     const imagePart = await fileToGenerativePart(imageFile);
     const prompt = `Generate a commercially oriented stock description (MAX 200 CHARACTERS).
 Rules:
+- **Structure:** 
+  1. Primary term + core visual description.
+  2. Commercial usage intent.
+- **IF EDITORIAL:** Must begin with "City, Country – Month Day, Year:". Factual, neutral. NO commercial phrases.
 - STRICTLY LIMIT to 200 characters or less.
-- Focus: What is depicted + texture + usage context.
-- Style: Concise, informative, neutral, commercial.
-- STRICTLY FORBIDDEN WORDS: "Perfect", "Ideal", "Symbolizing", "Showcasing", "Feature", "Illustrating", "Visually", "Picturetionaly".
-- No design clichés or service phrases.
+- **FORBIDDEN:** "close-up of", "detailed view", "perfect for", "ideal for", excessive adjectives.
+- Max 2 sentences.
 Context: Title: ${context.title}, Keys: ${context.keywords}.
 Return JSON {'description': string}.`;
     const schema = { type: Type.OBJECT, properties: { description: { type: Type.STRING } } };
@@ -411,11 +479,15 @@ export const generateAltText = async (imageFile: File, context: any) => withApiR
 export const generateKeywords = async (imageFile: File, context: any) => withApiRetry(async () => {
     const aiClient = getAiClient();
     const imagePart = await fileToGenerativePart(imageFile);
-    const prompt = `Generate 40-50 commercially relevant lowercase stock keywords.
+    const prompt = `Generate 50 commercially relevant lowercase stock keywords.
 Rules:
-- First 10-15 must be most important.
-- Focus on visual and textural characteristics + application.
+- First 10 = strongest search phrases (Buyer Intent).
+- **IF EDITORIAL:** Prioritize location, monument name, cultural identity.
+- **If Industrial:** Avoid geological speculation.
+- **If Plant:** No unconfirmed species names.
 - No duplicates.
+- No rare or decorative words.
+- Focus on commercial intent and search relevance.
 Context: Title: ${context.title}, Desc: ${context.description}.
 Return JSON {'keywords': string[]}.`;
     const schema = { type: Type.OBJECT, properties: { keywords: { type: Type.ARRAY, items: { type: Type.STRING } } } };
