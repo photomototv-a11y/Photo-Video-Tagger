@@ -64,6 +64,7 @@ function App() {
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+  const abortProcessingRef = useRef<boolean>(false);
 
   const { addToast } = useToast();
   // Fixed: Cannot find namespace 'NodeJS'. Using ReturnType<typeof setTimeout> for browser environments.
@@ -180,6 +181,7 @@ function App() {
   }, []);
 
   const processImages = useCallback(async (files: ImageFile[]) => {
+    abortProcessingRef.current = false;
     setIsProcessing(true);
     
     // Initialize context from existing successful images
@@ -197,6 +199,10 @@ function App() {
 
     // Process sequentially to allow batch context awareness
     for (const img of files) {
+        if (abortProcessingRef.current) {
+            break;
+        }
+
         // Skip if already processed or is restored (no real file)
         if (img.state === ProcessingState.SUCCESS) continue;
         if (img.isRestored) {

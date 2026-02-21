@@ -63,9 +63,15 @@ const fileToGenerativePart = async (file: File) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     
+    const timeout = setTimeout(() => {
+        URL.revokeObjectURL(url);
+        reject(new Error("IMAGE_LOAD_TIMEOUT"));
+    }, 15000);
+
     img.onload = () => {
+      clearTimeout(timeout);
       const canvas = document.createElement('canvas');
-      const MAX_DIM = 2048;
+      const MAX_DIM = 1024;
       let width = img.width;
       let height = img.height;
 
@@ -100,6 +106,7 @@ const fileToGenerativePart = async (file: File) => {
     };
 
     img.onerror = () => {
+      clearTimeout(timeout);
       URL.revokeObjectURL(url);
       if (supportedDirectly.includes(file.type)) {
         const reader = new FileReader();
@@ -205,10 +212,13 @@ const handleGeminiError = (error: any, functionName: string): never => {
         try {
             const parsed = JSON.parse(error);
             if (parsed.error && parsed.error.code === 429) isQuotaError = true;
-        } catch(e) {}
+            // Handle XHR/RPC 500 errors
+            if (parsed.error && parsed.error.code === 500) throw new Error("NETWORK_ERROR");
+        } catch(e) { if(e instanceof Error && e.message === "NETWORK_ERROR") throw e; }
     } else if (error.message) {
         const lowMsg = error.message.toLowerCase();
         if (lowMsg.includes('429') || lowMsg.includes('quota') || lowMsg.includes('exhausted')) isQuotaError = true;
+        if (lowMsg.includes('rpc failed') || lowMsg.includes('xhr error')) throw new Error("NETWORK_ERROR");
     }
 
     if (isQuotaError) {
@@ -232,9 +242,15 @@ const handleGeminiError = (error: any, functionName: string): never => {
 
 const withApiRetry = async <T>(apiCall: () => Promise<T>, functionName: string): Promise<T> => {
     const MAX_RETRIES = 2;
+    const API_TIMEOUT_MS = 60000; // 60 seconds timeout for API calls
+
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            return await apiCall();
+            // Wrap apiCall in a timeout race
+            const timeoutPromise = new Promise<never>((_, reject) => 
+                setTimeout(() => reject(new Error("API_TIMEOUT")), API_TIMEOUT_MS)
+            );
+            return await Promise.race([apiCall(), timeoutPromise]);
         } catch (rawError) {
             let standardized: Error;
             try { handleGeminiError(rawError, functionName); standardized = new Error("UNKNOWN"); } catch (e) { standardized = e as Error; }
@@ -243,7 +259,8 @@ const withApiRetry = async <T>(apiCall: () => Promise<T>, functionName: string):
                 throw standardized;
             }
 
-            if ((standardized.message === "RATE_LIMIT_EXCEEDED" || standardized.message === "NETWORK_ERROR") && attempt < MAX_RETRIES) {
+            if ((standardized.message === "RATE_LIMIT_EXCEEDED" || standardized.message === "NETWORK_ERROR" || standardized.message === "API_TIMEOUT") && attempt < MAX_RETRIES) {
+                console.warn(`Attempt ${attempt} failed with ${standardized.message}. Retrying...`);
                 await new Promise(r => setTimeout(r, 1500 * attempt));
             } else { throw standardized; }
         }
@@ -258,6 +275,9 @@ export const getFriendlyErrorMessage = (error: unknown): string => {
             case "FORMAT_NOT_SUPPORTED": return "Файл не поддерживается браузером.";
             case "VIDEO_LOAD_ERROR": return "Ошибка чтения видео. Формат не поддерживается браузером или файл поврежден.";
             case "VIDEO_TIMEOUT": return "Тайм-аут обработки видео. Файл может быть слишком большим или кодек не поддерживается.";
+            case "IMAGE_LOAD_TIMEOUT": return "Тайм-аут загрузки изображения. Файл поврежден или слишком большой.";
+            case "API_TIMEOUT": return "Сервер не ответил вовремя (Тайм-аут). Попробуйте позже или уменьшите количество файлов.";
+            case "NETWORK_ERROR": return "Ошибка сети или сервера (500). Повторите попытку.";
             case "QUOTA_EXCEEDED": return "Превышена квота API (429). Пожалуйста, проверьте биллинг в Google Cloud Console или подождите сброса лимитов.";
             case "RATE_LIMIT_EXCEEDED": return "Слишком много запросов. Подождите немного.";
             case "CONTENT_SAFETY_VIOLATION": return "Контент заблокирован фильтрами безопасности.";
@@ -283,12 +303,47 @@ Generate the following metadata strictly adhering to these rules:
 - **Description:** MUST follow format: "City, Country – Month Day, Year: [Factual Description]". Max 200 chars. NO commercial phrases ("suitable for").
 - **Keywords:** Prioritize location, monument name, cultural identity. No speculative historical sub-terms.
 
+**SEO-FIRST GENERATION STRUCTURE:**
+
+**CRITICAL: SEMANTIC ALIGNMENT RULE**
+- **Title:** Must start with the Primary Search Cluster.
+- **Description:** First sentence MUST start with the same Primary Search Cluster concepts.
+- **Keywords:** First 10 keywords MUST match the Primary Search Cluster concepts.
+- **NO GENERIC OPENINGS:** Strictly forbidden to start with "A photo of", "Close-up of", "Image of", "Shot of".
+
+1. **TITLE FORMULA:**
+   - **Structure:** Primary Search Cluster + Subject/Action + Context + Environment (optional).
+   - **Examples:**
+     - "Toddler Girl Loading Washing Machine at Home"
+     - "Female Craft Brewer Working in Microbrewery"
+     - "Green Hedge Texture Background Full Frame"
+     - "Preschool Girl Using Toy Laptop in Studio"
+   - **Rules:** 60-140 chars. Natural professional English. No filler/marketing phrases.
+
+2. **DESCRIPTION FORMULA (≤200 characters):**
+   - **Structure:** 
+     - Sentence 1: Primary search term + neutral visual description.
+     - Sentence 2: Clear commercial intent.
+   - **Rules:** 1-2 sentences. STRICTLY ≤200 chars. No "ideal for", "concept for marketing". No poetic language. No repetition.
+
+3. **KEYWORDS FORMULA (≤50):**
+   - **Structure:**
+     - First 10: Strongest search phrases (Buyer Intent).
+     - Next: Environment.
+     - Next: Action.
+     - Next: Commercial Intent.
+     - Next: Supporting Context.
+   - **Rules:** No duplicates. No brands. No evaluative words. No incorrect industry terms. 30-40% uniqueness within portfolio.
+
 **SUBJECT-SPECIFIC RULES:**
 - **If Texture/Pattern (CRITICAL):** 
   - **Title:** First 3-5 words MUST contain the primary high-volume search term + "Texture", "Background", "Surface", "Pattern", or "Wall".
   - **Description:** First sentence MUST include the primary search term. Include clear commercial usage intent (eco design, architectural background, branding).
   - **Keywords:** At least 30-40% must differ from similar images in the same cluster.
-- **If Person:** Prioritize conceptual keywords (Education, Lifestyle, Business, Development).
+- **If Person/Lifestyle (CRITICAL):**
+  - **Title:** First 3-5 words MUST contain the strongest high-volume search phrase (Occupation, Activity, or Concept). NO evaluative adjectives ("beautiful", "attractive").
+  - **Description:** First sentence MUST include primary search term. Include clear commercial intent (small business, education, industry, healthcare).
+  - **Keywords:** Include occupation + environment + activity + commercial intent. NO appearance-based tagging unless essential.
 - **If Industrial Material:** Avoid geological speculation (e.g., don't name specific rock types unless obvious).
 - **If Plant/Nature:** Avoid specific species names unless 100% visually confirmed.
 
@@ -299,17 +354,17 @@ Generate the following metadata strictly adhering to these rules:
    - No filler phrases ("for design", "ideal for", "inspired by").
    - No poetic adjectives.
    - Natural professional English.
-   - Example: "Green Hedge Texture Background Full Frame Dense Foliage Wall".
+   - Example: "Female Engineer Working on Laptop in Modern Office".
 
 2. Description (MAX 200 CHARACTERS):
    - **Structure:** 
      - Sentence 1: Primary term + core visual description.
-     - Sentence 2: Commercial usage intent (eco design, architectural background, branding).
+     - Sentence 2: Commercial usage intent (eco design, architectural background, branding, small business, education).
    - STRICTLY LIMIT to 200 characters or less.
-   - **FORBIDDEN PHRASES:** "close-up of", "detailed view", "perfect for", "ideal for", "image of", "picture of".
+   - **FORBIDDEN PHRASES:** "close-up of", "detailed view", "perfect for", "ideal for", "image of", "picture of", "capturing atmosphere", "authentic mood".
    - No speculative or scientific claims.
    - Max 2 sentences.
-   - Example: "Green hedge texture background with dense overlapping leaves in full frame. Natural foliage surface suitable for eco design, garden themes, and organic branding."
+   - Example: "Female engineer working on laptop in modern office environment. Professional business concept for technology and corporate workflow."
 
 3. Keywords (Max 50):
    - First 10 must be the strongest search phrases (Buyer Intent).
@@ -376,8 +431,10 @@ export const generateMediaMetadata = async (
                 prompt += `\nPREVIOUS TITLES (Ensure Uniqueness - NO DUPLICATES): [${recentTitles}]`;
                 prompt += `\n\n**ANTI-CANNIBALIZATION RULES (CRITICAL):**
 1. **Unique Anchor:** The first 5 words of the Title MUST be unique compared to previous titles.
-2. **Vary Intent:** If a similar subject exists in previous titles, change the commercial intent (e.g., "Concrete Wall" -> "Industrial Surface" -> "Minimal Backdrop").
-3. **Avoid Mirror Constructions:** Do not just swap words (e.g., "Texture Background" vs "Background Texture"). Use synonyms: Surface, Backdrop, Pattern, Wall, Material.
+2. **Vary Intent:** If a similar subject exists in previous titles, change the commercial intent:
+   - **Textures:** "Concrete Wall" -> "Industrial Surface" -> "Minimal Backdrop".
+   - **People:** Shift focus (Occupation vs Lifestyle vs Concept). Example: "Female Engineer" -> "Women in STEM" -> "Modern Workplace Concept".
+3. **Avoid Mirror Constructions:** Do not just swap words. Use synonyms and different angles.
 `;
             }
 
@@ -425,13 +482,16 @@ export const generateTitle = async (imageFile: File, context: any) => withApiRet
     const imagePart = await fileToGenerativePart(imageFile);
     const prompt = `Generate a concise, clear, and SEO-friendly stock title (60-140 characters).
 Rules:
+- **Formula:** Primary Search Cluster + Subject/Action + Context + Environment (optional).
 - **First 3-5 words MUST contain the main high-volume search term.**
 - **If Texture:** Prioritize "Texture", "Background", "Surface", "Pattern", or "Wall".
-- **If Person:** Prioritize concept (Lifestyle, Business, etc.).
+- **If Person:** Prioritize Occupation, Activity, or Concept. NO evaluative adjectives ("beautiful", "attractive").
 - **IF EDITORIAL:** Factual, neutral tone. NO marketing/evaluative words. Include Subject + Location.
 - Include a commercial tag if relevant (non-editorial).
 - No repetition of the same word twice.
 - No filler phrases ("for design", "ideal for").
+- **NO GENERIC OPENINGS:** Do not start with "A photo of", "Close-up of", "Image of".
+- No brand names.
 - Natural professional English.
 - Avoid: Long prepositions, extra details ("Top View of", "during"), subjective evaluations ("Beautiful", "Amazing").
 Context: Desc: ${context.description}, Keys: ${context.keywords}.
@@ -452,11 +512,11 @@ export const generateDescription = async (imageFile: File, context: any) => with
     const prompt = `Generate a commercially oriented stock description (MAX 200 CHARACTERS).
 Rules:
 - **Structure:** 
-  1. Primary term + core visual description.
-  2. Commercial usage intent (eco design, architectural background, branding).
+  1. Primary search term (MUST match Title's start) + neutral visual description.
+  2. Clear commercial usage intent.
 - **IF EDITORIAL:** Must begin with "City, Country – Month Day, Year:". Factual, neutral. NO commercial phrases.
 - STRICTLY LIMIT to 200 characters or less.
-- **FORBIDDEN:** "close-up of", "detailed view", "perfect for", "ideal for", excessive adjectives.
+- **FORBIDDEN:** "close-up of", "detailed view", "perfect for", "ideal for", "capturing atmosphere", "authentic mood", "image of", "photo of", excessive adjectives.
 - No speculative or scientific claims.
 - Max 2 sentences.
 Context: Title: ${context.title}, Keys: ${context.keywords}.
@@ -490,12 +550,21 @@ export const generateKeywords = async (imageFile: File, context: any) => withApi
     const imagePart = await fileToGenerativePart(imageFile);
     const prompt = `Generate 50 commercially relevant lowercase stock keywords.
 Rules:
-- First 10 = strongest search phrases (Buyer Intent).
+- **Structure:**
+  1. First 10: Strongest search phrases (Buyer Intent) - MUST match Title's primary cluster.
+  2. Next: Environment.
+  3. Next: Action.
+  4. Next: Commercial Intent.
+  5. Next: Supporting Context.
 - **IF EDITORIAL:** Prioritize location, monument name, cultural identity.
+- **If Person:** Include occupation + environment + activity + commercial intent. NO appearance-based tagging unless essential.
 - **If Industrial:** Avoid geological speculation.
 - **If Plant:** No unconfirmed species names.
 - No duplicates.
 - No rare or decorative words.
+- No brands.
+- No incorrect industry terms.
+- Avoid redundant synonyms.
 - Focus on commercial intent and search relevance.
 Context: Title: ${context.title}, Desc: ${context.description}.
 Return JSON {'keywords': string[]}.`;
