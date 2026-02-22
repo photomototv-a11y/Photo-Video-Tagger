@@ -199,6 +199,9 @@ function App() {
 
     // Process sequentially to allow batch context awareness
     for (const img of files) {
+        // Yield to main thread to prevent UI freezing and Vite disconnection
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         if (abortProcessingRef.current) {
             break;
         }

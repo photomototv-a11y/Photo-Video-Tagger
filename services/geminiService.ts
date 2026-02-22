@@ -96,13 +96,26 @@ const fileToGenerativePart = async (file: File) => {
       }
       
       ctx.drawImage(img, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      const base64Data = dataUrl.split(',')[1];
       
-      URL.revokeObjectURL(url);
-      resolve({
-        inlineData: { data: base64Data, mimeType: 'image/jpeg' },
-      });
+      canvas.toBlob((blob) => {
+          if (!blob) {
+              reject(new Error("CANVAS_ENCODING_FAILED"));
+              return;
+          }
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              const base64data = (reader.result as string).split(',')[1];
+              URL.revokeObjectURL(url);
+              resolve({
+                  inlineData: { data: base64data, mimeType: 'image/jpeg' },
+              });
+          };
+          reader.onerror = () => {
+              URL.revokeObjectURL(url);
+              reject(new Error("FILE_READ_ERROR"));
+          };
+          reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.85);
     };
 
     img.onerror = () => {
@@ -170,10 +183,24 @@ export const extractVideoFrames = async (file: File, frameCount: number = 8): Pr
                     });
                     
                     context?.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                    frames.push({
-                        data: dataUrl.split(',')[1],
-                        mimeType: 'image/jpeg'
+                    
+                    await new Promise<void>((resolveFrame, rejectFrame) => {
+                        canvas.toBlob((blob) => {
+                            if (!blob) {
+                                rejectFrame(new Error("FRAME_ENCODING_FAILED"));
+                                return;
+                            }
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                frames.push({
+                                    data: (reader.result as string).split(',')[1],
+                                    mimeType: 'image/jpeg'
+                                });
+                                resolveFrame();
+                            };
+                            reader.onerror = () => rejectFrame(new Error("FRAME_READ_ERROR"));
+                            reader.readAsDataURL(blob);
+                        }, 'image/jpeg', 0.8);
                     });
                 }
                 URL.revokeObjectURL(url);
@@ -241,8 +268,8 @@ const handleGeminiError = (error: any, functionName: string): never => {
 };
 
 const withApiRetry = async <T>(apiCall: () => Promise<T>, functionName: string): Promise<T> => {
-    const MAX_RETRIES = 2;
-    const API_TIMEOUT_MS = 60000; // 60 seconds timeout for API calls
+    const MAX_RETRIES = 3;
+    const API_TIMEOUT_MS = 120000; // 120 seconds timeout for API calls
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -261,7 +288,7 @@ const withApiRetry = async <T>(apiCall: () => Promise<T>, functionName: string):
 
             if ((standardized.message === "RATE_LIMIT_EXCEEDED" || standardized.message === "NETWORK_ERROR" || standardized.message === "API_TIMEOUT") && attempt < MAX_RETRIES) {
                 console.warn(`Attempt ${attempt} failed with ${standardized.message}. Retrying...`);
-                await new Promise(r => setTimeout(r, 1500 * attempt));
+                await new Promise(r => setTimeout(r, 2000 * attempt)); // Increased backoff
             } else { throw standardized; }
         }
     }
@@ -276,7 +303,7 @@ export const getFriendlyErrorMessage = (error: unknown): string => {
             case "VIDEO_LOAD_ERROR": return "Ошибка чтения видео. Формат не поддерживается браузером или файл поврежден.";
             case "VIDEO_TIMEOUT": return "Тайм-аут обработки видео. Файл может быть слишком большим или кодек не поддерживается.";
             case "IMAGE_LOAD_TIMEOUT": return "Тайм-аут загрузки изображения. Файл поврежден или слишком большой.";
-            case "API_TIMEOUT": return "Сервер не ответил вовремя (Тайм-аут). Попробуйте позже или уменьшите количество файлов.";
+            case "API_TIMEOUT": return "Сервер долго не отвечает (Тайм-аут 120с). Проверьте интернет или попробуйте позже.";
             case "NETWORK_ERROR": return "Ошибка сети или сервера (500). Повторите попытку.";
             case "QUOTA_EXCEEDED": return "Превышена квота API (429). Пожалуйста, проверьте биллинг в Google Cloud Console или подождите сброса лимитов.";
             case "RATE_LIMIT_EXCEEDED": return "Слишком много запросов. Подождите немного.";
